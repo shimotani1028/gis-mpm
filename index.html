@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local MPM - Terrain Viewer</title>
+    <style>
+      /* ===== ページ全体 =====
+         body は余白なし・スクロールなし。canvas が画面いっぱいに広がる前提 */
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        color: #ddd;
+      }
+
+      /* ===== Three.js が貼り付ける canvas =====
+         block にして余白を消し、画面いっぱいに広げる */
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      #fluid-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      /* ===== 画面左下の HUD（FPS / 取得状況の簡易表示用） ===== */
+      #hud {
+        position: fixed;
+        bottom: 8px;
+        left: 8px;
+        max-width: min(360px, calc(100vw - 16px));
+        padding: 6px 10px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 4px;
+        font-size: 11px;
+        line-height: 1.4;
+        white-space: pre-line;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      #data-attribution {
+        position: fixed;
+        right: 8px;
+        bottom: 8px;
+        max-width: min(420px, calc(100vw - 16px));
+        padding: 5px 8px;
+        border: 1px solid rgba(210, 235, 255, 0.22);
+        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.54);
+        color: #d7e8f5;
+        font-size: 11px;
+        line-height: 1.35;
+        text-align: right;
+        z-index: 10;
+        backdrop-filter: blur(5px);
+      }
+
+      #data-attribution a {
+        color: #bde8ff;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      #fluid-colorbar {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        width: min(360px, calc(100vw - 40px));
+        transform: translateX(-50%);
+        padding: 7px 9px 6px;
+        border: 1px solid rgba(225, 238, 248, 0.28);
+        border-radius: 5px;
+        background: rgba(8, 12, 16, 0.68);
+        color: #eff8ff;
+        font-size: 11px;
+        line-height: 1.25;
+        pointer-events: none;
+        z-index: 9;
+        box-sizing: border-box;
+        backdrop-filter: blur(5px);
+      }
+
+      #fluid-colorbar-title {
+        margin-bottom: 4px;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .fluid-colorbar-ramp {
+        height: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.42);
+        border-radius: 3px;
+        background: linear-gradient(
+          to right,
+          #1847ff 0%,
+          #00b7ff 34%,
+          #ffe15a 68%,
+          #ff271c 100%
+        );
+      }
+
+      .fluid-colorbar-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 3px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #import-panel {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        width: min(340px, calc(100vw - 16px));
+        padding: 8px;
+        background: rgba(12, 18, 24, 0.78);
+        border: 1px solid rgba(180, 220, 255, 0.22);
+        border-radius: 6px;
+        box-sizing: border-box;
+        color: #eef6ff;
+        font-size: 12px;
+        line-height: 1.35;
+        z-index: 11;
+        backdrop-filter: blur(6px);
+        transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+
+      #import-panel.drag-over {
+        background: rgba(16, 48, 66, 0.88);
+        border-color: rgba(120, 220, 255, 0.9);
+        box-shadow:
+          0 0 0 1px rgba(120, 220, 255, 0.28),
+          0 0 18px rgba(80, 190, 240, 0.28);
+      }
+
+      .import-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 7px;
+      }
+
+      #import-panel h2 {
+        margin: 0;
+        font-size: 13px;
+      }
+
+      #import-toggle {
+        width: 26px;
+        height: 22px;
+        padding: 0;
+        line-height: 1;
+        border: 1px solid rgba(210, 235, 255, 0.32);
+        border-radius: 4px;
+        background: rgba(42, 112, 170, 0.55);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      #import-toggle:hover {
+        background: rgba(62, 138, 202, 0.78);
+      }
+
+      #import-panel.collapsed {
+        width: auto;
+        padding: 6px 10px;
+      }
+
+      #import-panel.collapsed .import-body { display: none; }
+      #import-panel.collapsed .import-header { margin-bottom: 0; }
+
+      .import-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+
+      .import-tab {
+        padding: 6px 4px;
+        border: 1px solid rgba(210, 235, 255, 0.32);
+        border-radius: 4px;
+        background: rgba(19, 44, 64, 0.72);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .import-tab:hover {
+        background: rgba(62, 138, 202, 0.86);
+      }
+
+      .import-tab.active {
+        border-color: rgba(142, 220, 255, 0.82);
+        background: rgba(42, 112, 170, 0.82);
+      }
+
+      .import-source-pane[hidden] {
+        display: none;
+      }
+
+      .gsi-actions {
+        display: grid;
+        margin-top: 8px;
+      }
+
+      .gsi-actions button {
+        padding: 6px 4px;
+        border: 1px solid rgba(210, 235, 255, 0.32);
+        border-radius: 4px;
+        background: rgba(42, 112, 170, 0.72);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .gsi-actions button:hover {
+        background: rgba(62, 138, 202, 0.86);
+      }
+
+      .plateau-catalog {
+        display: grid;
+        gap: 6px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(210, 235, 255, 0.18);
+      }
+
+      .plateau-catalog label {
+        display: grid;
+        gap: 3px;
+        color: #cfe7f7;
+      }
+
+      .plateau-catalog select {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 5px 6px;
+        border: 1px solid rgba(210, 235, 255, 0.28);
+        border-radius: 4px;
+        background: rgba(4, 11, 18, 0.82);
+        color: #eef6ff;
+        font: inherit;
+      }
+
+      .plateau-catalog select:disabled {
+        color: rgba(207, 231, 247, 0.56);
+        border-color: rgba(210, 235, 255, 0.16);
+      }
+
+      .catalog-actions {
+        display: grid;
+      }
+
+      .catalog-actions button {
+        padding: 6px 4px;
+        border: 1px solid rgba(210, 235, 255, 0.32);
+        border-radius: 4px;
+        background: rgba(37, 102, 124, 0.76);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .catalog-actions button:hover:not(:disabled) {
+        background: rgba(52, 128, 150, 0.9);
+      }
+
+      .catalog-actions button:disabled {
+        cursor: default;
+        opacity: 0.54;
+      }
+
+      #import-status {
+        margin-top: 7px;
+        color: #cfe7f7;
+      }
+
+      #import-status:empty {
+        display: none;
+      }
+
+      body.loading-blocked {
+        cursor: wait;
+      }
+
+      #loading-modal[hidden] {
+        display: none;
+      }
+
+      #loading-modal {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: rgba(0, 0, 0, 0.64);
+        z-index: 30;
+        pointer-events: auto;
+      }
+
+      #loading-modal.loading-opaque {
+        background: #0b1620;
+      }
+
+      #loading-modal.loading-error .loading-dialog {
+        border-color: rgba(255, 171, 122, 0.58);
+        box-shadow:
+          0 20px 48px rgba(0, 0, 0, 0.42),
+          0 0 0 1px rgba(255, 135, 90, 0.16);
+      }
+
+      .loading-dialog {
+        width: min(420px, calc(100vw - 48px));
+        padding: 18px;
+        border: 1px solid rgba(210, 235, 255, 0.26);
+        border-radius: 6px;
+        background: rgba(12, 18, 24, 0.94);
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.42);
+        color: #eef6ff;
+      }
+
+      #loading-title {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      #loading-modal.loading-error #loading-title {
+        color: #ffd9c2;
+      }
+
+      #loading-message {
+        margin-top: 10px;
+        min-height: 2.8em;
+        color: #cfe7f7;
+        font-size: 12px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      .loading-progress-track {
+        position: relative;
+        height: 9px;
+        margin-top: 14px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(210, 235, 255, 0.14);
+      }
+
+      #loading-modal.loading-error .loading-progress-track,
+      #loading-modal.loading-error #loading-progress-label {
+        display: none;
+      }
+
+      #loading-progress-bar {
+        width: 0%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #59c2e8, #91e0a8);
+        transition: width 140ms ease;
+      }
+
+      #loading-progress-bar.indeterminate {
+        width: 45%;
+        animation: loading-sweep 1.2s ease-in-out infinite;
+      }
+
+      #loading-progress-label {
+        margin-top: 8px;
+        color: #b7d8ee;
+        font-size: 11px;
+        text-align: right;
+      }
+
+      #cancel-loading {
+        width: 100%;
+        margin-top: 12px;
+        padding: 7px 8px;
+        border: 1px solid rgba(255, 210, 170, 0.36);
+        border-radius: 4px;
+        background: rgba(124, 62, 37, 0.76);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      #cancel-loading:hover:not(:disabled) {
+        background: rgba(152, 78, 48, 0.9);
+      }
+
+      #cancel-loading:disabled {
+        display: none;
+      }
+
+      @keyframes loading-sweep {
+        0% { transform: translateX(-110%); }
+        100% { transform: translateX(245%); }
+      }
+
+      /* ===== 右上の計算設定パネル群 ===== */
+      #mpm-panel-stack {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        max-width: calc(100vw - 16px);
+        z-index: 12;
+        pointer-events: none;
+      }
+
+      #mpm-operation-dialog,
+      #simulation-panel {
+        pointer-events: auto;
+      }
+
+      #mpm-operation-dialog {
+        width: 280px;
+        padding: 9px 10px;
+        border: 1px solid rgba(180, 220, 255, 0.22);
+        border-radius: 6px;
+        box-sizing: border-box;
+        background: rgba(12, 18, 24, 0.78);
+        color: #eef6ff;
+        font-size: 11px;
+        line-height: 1.5;
+        backdrop-filter: blur(6px);
+      }
+
+      #simulation-panel {
+        position: relative;
+        width: min(320px, calc(100vw - 24px));
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 10px;
+        background: rgba(12, 18, 24, 0.78);
+        border: 1px solid rgba(180, 220, 255, 0.22);
+        border-radius: 6px;
+        box-sizing: border-box;
+        color: #eef6ff;
+        font-size: 12px;
+        line-height: 1.3;
+        backdrop-filter: blur(6px);
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      #simulation-panel.running {
+        border-color: rgba(255, 188, 82, 0.92);
+        box-shadow:
+          0 0 0 1px rgba(255, 188, 82, 0.22),
+          0 0 18px rgba(255, 188, 82, 0.24);
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      #simulation-panel h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      #simulation-panel.running h2::after {
+        content: "解析中";
+        margin-left: 8px;
+        color: #ffc86f;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      #panel-toggle {
+        width: 26px;
+        height: 22px;
+        padding: 0;
+        line-height: 1;
+        border: 1px solid rgba(210, 235, 255, 0.32);
+        border-radius: 4px;
+        background: rgba(42, 112, 170, 0.55);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      #panel-toggle:hover {
+        background: rgba(62, 138, 202, 0.78);
+      }
+
+      /* 最小化時はヘッダだけ残し、本体を非表示にする */
+      #simulation-panel.collapsed {
+        width: auto;
+        padding: 6px 10px;
+      }
+      #simulation-panel.collapsed .panel-body { display: none; }
+      #simulation-panel.collapsed .panel-header { margin-bottom: 0; }
+      #simulation-panel.collapsed .sim-buttons {
+        grid-template-columns: repeat(3, 54px);
+        margin-top: 8px;
+      }
+
+      .sim-grid {
+        display: grid;
+        grid-template-columns: 1fr 86px;
+        gap: 6px 8px;
+        align-items: center;
+      }
+
+      .sim-grid label {
+        color: #d5e8f8;
+      }
+
+      .sim-field-label {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 5px;
+      }
+
+      .sim-label-text {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sim-info {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        padding: 0;
+        appearance: none;
+        border: 1px solid rgba(210, 235, 255, 0.58);
+        border-radius: 50%;
+        background: rgba(74, 152, 211, 0.32);
+        color: #eaf7ff;
+        font-family: inherit;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: help;
+      }
+
+      .sim-info:hover,
+      .sim-info:focus-visible {
+        border-color: rgba(255, 255, 255, 0.9);
+        background: rgba(92, 177, 236, 0.58);
+        outline: none;
+      }
+
+      #simulation-tooltip {
+        position: fixed;
+        z-index: 40;
+        max-width: min(260px, calc(100vw - 16px));
+        padding: 8px 9px;
+        border: 1px solid rgba(180, 220, 255, 0.34);
+        border-radius: 5px;
+        background: rgba(8, 13, 18, 0.96);
+        color: #f3f9ff;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+        font-size: 11px;
+        line-height: 1.45;
+        white-space: pre-line;
+        pointer-events: none;
+      }
+
+      #interaction-tooltip {
+        position: fixed;
+        z-index: 41;
+        max-width: min(280px, calc(100vw - 16px));
+        padding: 8px 9px;
+        border: 1px solid rgba(255, 226, 172, 0.42);
+        border-radius: 5px;
+        background: rgba(14, 16, 18, 0.95);
+        color: #fff7df;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
+        font-size: 11px;
+        line-height: 1.45;
+        white-space: pre-line;
+        pointer-events: none;
+      }
+
+      .sim-grid input,
+      .sim-grid select {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 4px 5px;
+        border: 1px solid rgba(210, 235, 255, 0.28);
+        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.35);
+        color: #fff;
+        font: inherit;
+      }
+
+      .sim-grid select {
+        appearance: auto;
+      }
+
+      .sim-grid input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        justify-self: start;
+        accent-color: #49b6e8;
+      }
+
+      .sim-grid input[readonly],
+      .sim-grid input:disabled,
+      .sim-grid select:disabled {
+        color: #b7d8ee;
+        background: rgba(0, 0, 0, 0.18);
+        opacity: 1;
+      }
+
+      .sim-buttons {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .sim-buttons button {
+        padding: 6px 4px;
+        border: 1px solid rgba(210, 235, 255, 0.32);
+        border-radius: 4px;
+        background: rgba(42, 112, 170, 0.72);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .sim-buttons button:hover {
+        background: rgba(62, 138, 202, 0.86);
+      }
+
+      .operation-help {
+        color: #cfe7f7;
+      }
+
+      .operation-help-title {
+        margin-bottom: 4px;
+        color: #eef6ff;
+        font-weight: 700;
+      }
+
+      .operation-help-line {
+        margin: 0;
+      }
+
+      @media (max-width: 660px) {
+        #mpm-panel-stack {
+          flex-direction: column-reverse;
+          align-items: flex-end;
+        }
+
+        #mpm-operation-dialog,
+        #simulation-panel {
+          width: min(320px, calc(100vw - 16px));
+        }
+
+        #simulation-panel {
+          max-height: calc(100vh - 132px);
+        }
+      }
+
+      /* ===== WebGPU 非対応時のメッセージ ===== */
+      #unsupported {
+        position: fixed;
+        inset: 0;
+        display: none;                  /* JS 側で WebGPU 非対応時に flex に切り替え */
+        align-items: center;
+        justify-content: center;
+        background: #111;
+        color: #fff;
+        font-size: 18px;
+        text-align: center;
+        padding: 24px;
+        z-index: 20;
+      }
+    </style>
+  </head>
+  <body class="loading-blocked">
+    <!-- HUD: FPS とロード中タイル数を表示する小さな箱 -->
+    <div id="hud">起動中…</div>
+    <div id="data-attribution" aria-label="データ出典" aria-live="polite"></div>
+    <div id="fluid-colorbar" aria-hidden="true" hidden>
+      <div id="fluid-colorbar-title">流速</div>
+      <div class="fluid-colorbar-ramp"></div>
+      <div class="fluid-colorbar-labels">
+        <span id="fluid-colorbar-min">0</span>
+        <span id="fluid-colorbar-max">1</span>
+      </div>
+    </div>
+
+    <div id="loading-modal" class="loading-opaque" role="dialog" aria-modal="true" aria-busy="true">
+      <div class="loading-dialog">
+        <div id="loading-title">読み込み中</div>
+        <div id="loading-message">国土地理院 DEM を準備中...</div>
+        <div class="loading-progress-track">
+          <div id="loading-progress-bar" class="indeterminate" role="progressbar"></div>
+        </div>
+        <div id="loading-progress-label">処理中...</div>
+        <button id="cancel-loading" type="button" disabled>キャンセル</button>
+      </div>
+    </div>
+
+    <div id="import-panel">
+      <div class="import-header">
+        <h2>入力地形</h2>
+        <button id="import-toggle" type="button" aria-label="入力地形パネル折り畳み" aria-expanded="true" title="折り畳み / 展開">−</button>
+      </div>
+      <div class="import-body">
+        <div class="import-tabs" role="tablist" aria-label="Import source">
+          <button id="import-tab-gsi" class="import-tab active" type="button" role="tab" aria-selected="true" aria-controls="gsi-import-pane">国土地理院</button>
+          <button id="import-tab-plateau" class="import-tab" type="button" role="tab" aria-selected="false" aria-controls="plateau-import-pane">PLATEAU</button>
+        </div>
+        <div id="gsi-import-pane" class="import-source-pane" role="tabpanel" aria-labelledby="import-tab-gsi"></div>
+        <div id="plateau-import-pane" class="import-source-pane" role="tabpanel" aria-labelledby="import-tab-plateau" hidden>
+          <div class="plateau-catalog">
+            <label for="plateau-prefecture-select">
+              都道府県
+              <select id="plateau-prefecture-select" disabled>
+                <option value="">未取得</option>
+              </select>
+            </label>
+            <label for="plateau-city-select">
+              市町村
+              <select id="plateau-city-select" disabled>
+                <option value="">都道府県を選択</option>
+              </select>
+            </label>
+            <label for="plateau-year-select">
+              年度
+              <select id="plateau-year-select" disabled>
+                <option value="">市町村を選択</option>
+              </select>
+            </label>
+            <label for="plateau-resource-select">
+              CityGML ZIP
+              <select id="plateau-resource-select" disabled>
+                <option value="">年度を選択</option>
+              </select>
+            </label>
+            <div class="catalog-actions">
+              <button id="apply-plateau-catalog" type="button" disabled>適用</button>
+            </div>
+          </div>
+        </div>
+        <div id="import-status"></div>
+      </div>
+    </div>
+
+    <!-- 右上の MPM 計算設定パネルと、その左隣に置く基本操作ダイアログ -->
+    <div id="mpm-panel-stack">
+      <div id="mpm-operation-dialog" role="dialog" aria-labelledby="mpm-operation-title">
+        <div class="operation-help" aria-label="基本操作">
+          <div id="mpm-operation-title" class="operation-help-title">基本操作</div>
+          <p class="operation-help-line">左ドラッグ: 平行移動</p>
+          <p class="operation-help-line">右ドラッグ / Shift+左ドラッグ: 視点回転</p>
+          <p class="operation-help-line">マウスホイール: 拡大縮小</p>
+          <p class="operation-help-line">Ctrl+ドラッグ: 計算領域の平行移動</p>
+          <p class="operation-help-line">地図上ダブルクリック: 計算領域の原点移動</p>
+        </div>
+      </div>
+
+      <div id="simulation-panel">
+        <div class="panel-header">
+          <h2>MPM 計算</h2>
+          <button id="panel-toggle" type="button" aria-label="パネル折り畳み" title="折り畳み / 展開">−</button>
+        </div>
+        <div class="panel-body">
+          <div class="sim-grid">
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-origin-x">originX [m]</label>
+              <button class="sim-info" type="button" aria-label="originX の説明" data-tooltip="計算領域の X 方向開始位置&#10;[最小値: なし, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-origin-x" type="number" step="10" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-origin-y">originY [m]</label>
+              <button class="sim-info" type="button" aria-label="originY の説明" data-tooltip="計算領域の Y 方向開始位置。地形と障害物から自動計算されます。&#10;[最小値: 自動, 最大値: 自動]">i</button>
+            </div>
+            <input id="sim-origin-y" type="number" readonly />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-origin-z">originZ [m]</label>
+              <button class="sim-info" type="button" aria-label="originZ の説明" data-tooltip="計算領域の Z 方向開始位置&#10;[最小値: なし, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-origin-z" type="number" step="10" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-x-length">xL [m]</label>
+              <button class="sim-info" type="button" aria-label="xL の説明" data-tooltip="計算領域の X 方向長さ&#10;[最小値: 10, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-x-length" type="number" min="10" step="10" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-y-length">yL [m]</label>
+              <button class="sim-info" type="button" aria-label="yL の説明" data-tooltip="計算領域の Y 方向長さ。地形、障害物、水深から自動計算されます。&#10;[最小値: 10, 最大値: 自動]">i</button>
+            </div>
+            <input id="sim-y-length" type="number" readonly />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-z-length">zL [m]</label>
+              <button class="sim-info" type="button" aria-label="zL の説明" data-tooltip="計算領域の Z 方向長さ&#10;[最小値: 10, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-z-length" type="number" min="10" step="10" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-terrain-lift">surface gap [m]</label>
+              <button class="sim-info" type="button" aria-label="surface gap の説明" data-tooltip="初期水層の底面を地形から持ち上げる距離&#10;[最小値: 0, 最大値: yL - water depth]">i</button>
+            </div>
+            <input id="sim-terrain-lift" type="number" min="0" max="50" step="1" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-water-depth">water depth [m]</label>
+              <button class="sim-info" type="button" aria-label="water depth の説明" data-tooltip="初期水層の厚み&#10;[最小値: 1, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-water-depth" type="number" min="1" step="1" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-particle-count">particles upper limit [particles]</label>
+              <button class="sim-info" type="button" aria-label="particles upper limit の説明" data-tooltip="確保する粒子バッファの上限。実際に使う粒子数は体積と particle spacing で決まります。&#10;[最小値: 1, 最大値: 500000]">i</button>
+            </div>
+            <input id="sim-particle-count" type="number" min="1" max="500000" step="1000" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-active-particle-count">active particles [particles]</label>
+              <button class="sim-info" type="button" aria-label="active particles の説明" data-tooltip="現在の流体体積と particle spacing から使われる実効粒子数&#10;[最小値: 0, 最大値: particles upper limit]">i</button>
+            </div>
+            <input id="sim-active-particle-count" type="number" disabled />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-particle-spacing">particle spacing [m]</label>
+              <button class="sim-info" type="button" aria-label="particle spacing の説明" data-tooltip="初期粒子同士の代表間隔。小さいほど active particles が増えます。&#10;[最小値: 0.02, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-particle-spacing" type="number" min="0.02" step="0.05" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-viscosity">fluid viscosity [-]</label>
+              <button class="sim-info" type="button" aria-label="fluid viscosity の説明" data-tooltip="流体の粘性係数。大きいほど流れが粘ります。&#10;[最小値: 0, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-viscosity" type="number" min="0" step="0.01" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-domain-friction">domain friction [-]</label>
+              <button class="sim-info" type="button" aria-label="domain friction の説明" data-tooltip="計算領域外壁と流体の摩擦係数&#10;[最小値: 0, 最大値: 1]">i</button>
+            </div>
+            <input id="sim-domain-friction" type="number" min="0" max="1" step="0.05" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-terrain-friction">terrain friction [-]</label>
+              <button class="sim-info" type="button" aria-label="terrain friction の説明" data-tooltip="地形高さ場と流体の摩擦係数&#10;[最小値: 0, 最大値: 1]">i</button>
+            </div>
+            <input id="sim-terrain-friction" type="number" min="0" max="1" step="0.05" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-object-friction">object friction [-]</label>
+              <button class="sim-info" type="button" aria-label="object friction の説明" data-tooltip="建物など障害物と流体の摩擦係数&#10;[最小値: 0, 最大値: 1]">i</button>
+            </div>
+            <input id="sim-object-friction" type="number" min="0" max="1" step="0.05" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-domain-restitution">domain restitution [-]</label>
+              <button class="sim-info" type="button" aria-label="domain restitution の説明" data-tooltip="計算領域外壁での反発係数。0 で跳ね返りなしに近くなります。&#10;[最小値: 0, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-domain-restitution" type="number" min="0" step="0.05" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-terrain-restitution">terrain restitution [-]</label>
+              <button class="sim-info" type="button" aria-label="terrain restitution の説明" data-tooltip="地形高さ場での反発係数。0 で跳ね返りなしに近くなります。&#10;[最小値: 0, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-terrain-restitution" type="number" min="0" step="0.05" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-object-restitution">object restitution [-]</label>
+              <button class="sim-info" type="button" aria-label="object restitution の説明" data-tooltip="建物など障害物での反発係数。0 で跳ね返りなしに近くなります。&#10;[最小値: 0, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-object-restitution" type="number" min="0" step="0.05" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-dt">dt [sim s]</label>
+              <button class="sim-info" type="button" aria-label="dt の説明" data-tooltip="時間ステップ。物理秒ではなく、MPM 内部の数値時間です。&#10;[最小値: 0.00001, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-dt" type="number" min="0.00001" step="0.005" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-substeps">steps / batch [steps]</label>
+              <button class="sim-info" type="button" aria-label="steps per batch の説明" data-tooltip="1 回の GPU command buffer にまとめる計算ステップ数&#10;[最小値: 1, 最大値: 3200]">i</button>
+            </div>
+            <input id="sim-substeps" type="number" min="1" max="3200" step="1" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-render-interval">draw every [frames]</label>
+              <button class="sim-info" type="button" aria-label="draw every の説明" data-tooltip="何描画フレームごとに画面を更新するか。大きいほど描画頻度が下がります。&#10;[最小値: 1, 最大値: 120]">i</button>
+            </div>
+            <input id="sim-render-interval" type="number" min="1" max="120" step="1" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-water-render">water render [-]</label>
+              <button class="sim-info" type="button" aria-label="water render の説明" data-tooltip="粒子をスクリーンスペースの水面として合成表示するか&#10;[最小値: off, 最大値: on]">i</button>
+            </div>
+            <input id="sim-water-render" type="checkbox" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-fluid-display-type">display type [-]</label>
+              <button class="sim-info" type="button" aria-label="display type の説明" data-tooltip="water render と簡易粒子表示の色を通常表示、流速コンター、密度比コンターから選びます。&#10;[選択肢: なし, 流速, 密度比]">i</button>
+            </div>
+            <select id="sim-fluid-display-type">
+              <option value="none">なし</option>
+              <option value="velocity">流速</option>
+              <option value="density">密度比</option>
+            </select>
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-fluid-display-min">display min [-]</label>
+              <button class="sim-info" type="button" aria-label="display min の説明" data-tooltip="コンター色の下限値。この値以下は青で表示します。&#10;[最小値: なし, 最大値: display max 未満]">i</button>
+            </div>
+            <input id="sim-fluid-display-min" type="number" step="0.01" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-fluid-display-max">display max [-]</label>
+              <button class="sim-info" type="button" aria-label="display max の説明" data-tooltip="コンター色の上限値。この値以上は赤で表示します。&#10;[最小値: display min より大きい値, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-fluid-display-max" type="number" step="0.01" />
+            <div class="sim-field-label">
+              <label class="sim-label-text" for="sim-particle-size">display size [cell]</label>
+              <button class="sim-info" type="button" aria-label="display size の説明" data-tooltip="通常粒子 mesh の表示サイズ。water render が off の時に主に見えます。&#10;[最小値: 0.01, 最大値: なし]">i</button>
+            </div>
+            <input id="sim-particle-size" type="number" min="0.01" step="0.01" />
+          </div>
+        </div>
+        <div class="sim-buttons">
+          <button id="sim-start" type="button">Start</button>
+          <button id="sim-stop" type="button">Stop</button>
+          <button id="sim-reset" type="button">Reset</button>
+        </div>
+      </div>
+    </div>
+    <div id="simulation-tooltip" role="tooltip" hidden></div>
+    <div id="interaction-tooltip" role="tooltip" hidden></div>
+
+    <!-- WebGPU 非対応ブラウザに表示する案内 -->
+    <div id="unsupported">
+      このブラウザは WebGPU に対応していません。<br />
+      Chrome / Edge 113+ で開いてください。
+    </div>
+
+    <!-- main.ts をエントリとして読み込む。type=module で ESM 解決 -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

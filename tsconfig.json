@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    /* ====== ターゲット / モジュール ====== */
+    "target": "ES2022",                       // Top-level await などを許可
+    "module": "ESNext",                       // Vite が ESM を解決
+    "moduleResolution": "bundler",            // Vite 推奨：bundler 解決でサブパス export を解決
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    // ↑ WebWorker を入れることで Worker 内 self の型を取得
+
+    /* ====== 厳密チェック ====== */
+    "strict": true,                           // 全 strict オプション ON
+    "noUncheckedIndexedAccess": true,         // 配列アクセス結果を T | undefined に
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+
+    /* ====== 出力 ====== */
+    "noEmit": true,                           // Vite がトランスパイルするため tsc は型チェックのみ
+    "isolatedModules": true,                  // 1 ファイルずつトランスパイル可能であることを保証
+    "verbatimModuleSyntax": true,             // import type の使い分けを強制（バンドル安定）
+
+    /* ====== 互換 ====== */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,                     // three.js 内部の型エラーを回避
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    /* ====== JSX なし（プレーン TypeScript） ====== */
+    "jsx": "preserve"
+  },
+  "include": ["src"]
+}

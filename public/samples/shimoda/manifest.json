@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "name": "Shimoda PLATEAU building cache",
+  "description": "Cached PLATEAU CityGML building import generated from 静岡県_下田市 2023 / CityGML（v4）.",
+  "crs": "EPSG:6697",
+  "verticalDatum": "TP",
+  "bounds": {
+    "minLon": 138.85761149823216,
+    "minLat": 34.6328737713758,
+    "maxLon": 138.98799878999594,
+    "maxLat": 34.761145122256885,
+    "minHeight": 0.169,
+    "maxHeight": 502.15999999999997
+  },
+  "terrain": {
+    "type": "raster-dem-tilejson",
+    "encoding": "terrarium",
+    "tilejson": "https://tile.plateauview.mlit.go.jp/terrarium/tilejson.json?format=png&geoid=none",
+    "urlTemplate": "https://tile.plateauview.mlit.go.jp/terrarium/{z}/{x}/{y}.png?geoid=none"
+  },
+  "obstacles": [
+    {
+      "type": "geojson",
+      "path": "buildings.geojson",
+      "heightMode": "absolute",
+      "baseHeightProperty": "baseHeight",
+      "topHeightProperty": "topHeight"
+    }
+  ]
+}

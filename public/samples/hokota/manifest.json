@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "name": "Hokota PLATEAU MVP sample",
+  "description": "Small PLATEAU import sample generated from 54401482_bldg_6697_op.gml.",
+  "crs": "EPSG:6697",
+  "verticalDatum": "TP",
+  "bounds": {
+    "minLon": 140.52498298400116,
+    "minLat": 36.14997228366487,
+    "maxLon": 140.5375266704562,
+    "maxLat": 36.15835734793632,
+    "minHeight": 6.92,
+    "maxHeight": 50.52638
+  },
+  "terrain": {
+    "type": "raster-dem-tilejson",
+    "encoding": "terrarium",
+    "tilejson": "https://tile.plateauview.mlit.go.jp/terrarium/tilejson.json?format=png&geoid=none",
+    "urlTemplate": "https://tile.plateauview.mlit.go.jp/terrarium/{z}/{x}/{y}.png?geoid=none"
+  },
+  "obstacles": [
+    {
+      "type": "geojson",
+      "path": "buildings.geojson",
+      "heightMode": "absolute",
+      "baseHeightProperty": "baseHeight",
+      "topHeightProperty": "topHeight"
+    }
+  ]
+}

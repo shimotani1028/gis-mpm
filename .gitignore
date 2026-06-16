@@ -1,0 +1,30 @@
+# Codex / Claude / AI tools
+.codex/
+.claude/
+CLAUDE.md
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+*.code-workspace
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# Public release staging
+public-release/
+release/
+gis-mpm/
+
+# Laravel / PHP
+/vendor/
+.env
+.env.*
+!.env.example
+/storage/*.key
+/storage/logs/*
+/bootstrap/cache/*
