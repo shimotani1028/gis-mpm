@@ -1,0 +1,30 @@
+{
+  "baseCommit": "cb5233a8e420256e02a8e060b0ed162d81601c95",
+  "gsi": {
+    "activeParticles": 142999,
+    "capacity": 500000,
+    "tiles": 61,
+    "startStopReset": "observed",
+    "stoppedModelTime": 18.6,
+    "resetModelTime": 0
+  },
+  "plateau": {
+    "changed": [
+      {
+        "level": "error",
+        "message": "[Import] PLATEAU tab switch failed Error: fetch failed: 400  for https://tile.plateauview.mlit.go.jp/terrarium/15/29028/13012.png?geoid=none\n    at TileLoader.handleMessage (http://127.0.0.1:5173/src/terrain/TileLoader.ts:131:13)\n    at TileLoader.w.onmessage (http://127.0.0.1:5173/src/terrain/TileLoader.ts:45:31)",
+        "timestamp": "2026-10-13T04:21:44.323Z",
+        "url": "http://127.0.0.1:5173/@vite/client"
+      }
+    ],
+    "baseline": [
+      {
+        "level": "error",
+        "message": "[Import] PLATEAU tab switch failed Error: fetch failed: 400  for https://tile.plateauview.mlit.go.jp/terrarium/15/29028/13011.png?geoid=none\n    at TileLoader.handleMessage (http://127.0.0.1:5174/src/terrain/TileLoader.ts:131:13)\n    at TileLoader.w.onmessage (http://127.0.0.1:5174/src/terrain/TileLoader.ts:45:31)",
+        "timestamp": "2026-10-13T04:24:56.678Z",
+        "url": "http://127.0.0.1:5174/@vite/client"
+      }
+    ],
+    "status": "External terrain tile HTTP 400 in both revisions; full import unverified"
+  }
+}
