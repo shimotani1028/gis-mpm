@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "validationStatus": "CPU analytic diagnostics only; production GPU fluid/collision stability remains unverified by this script",
+  "refinementScope": "One P2G and density gather; same physical block, no time evolution or boundary collisions",
+  "refinement": [
+    {
+      "resolution": 16,
+      "cellWidthM": 0.0625,
+      "particleCount": 512,
+      "particleMassKg": 0.030517578125,
+      "gridMassKg": 15.625,
+      "analyticMassKg": 15.625,
+      "relativeMassError": 0,
+      "interiorDensityKgM3": 1000,
+      "relativeInteriorDensityError": 0
+    },
+    {
+      "resolution": 32,
+      "cellWidthM": 0.03125,
+      "particleCount": 4096,
+      "particleMassKg": 0.003814697265625,
+      "gridMassKg": 15.625,
+      "analyticMassKg": 15.625,
+      "relativeMassError": 0,
+      "interiorDensityKgM3": 1000,
+      "relativeInteriorDensityError": 0
+    },
+    {
+      "resolution": 64,
+      "cellWidthM": 0.015625,
+      "particleCount": 32768,
+      "particleMassKg": 0.000476837158203125,
+      "gridMassKg": 15.625,
+      "analyticMassKg": 15.625,
+      "relativeMassError": 0,
+      "interiorDensityKgM3": 1000,
+      "relativeInteriorDensityError": 0
+    }
+  ],
+  "timeRefinementScope": "Semi-implicit Euler point free fall without grid transfers or boundaries, time = 1 second",
+  "timeRefinement": [
+    {
+      "dtSeconds": 0.04,
+      "position": -5.099458000000002,
+      "velocity": -9.80665,
+      "exactPosition": -4.903325,
+      "positionError": 0.19613300000000233
+    },
+    {
+      "dtSeconds": 0.02,
+      "position": -5.001391499999998,
+      "velocity": -9.806649999999992,
+      "exactPosition": -4.903325,
+      "positionError": 0.09806649999999806
+    },
+    {
+      "dtSeconds": 0.01,
+      "position": -4.952358249999995,
+      "velocity": -9.806649999999989,
+      "exactPosition": -4.903325,
+      "positionError": 0.049033249999995476
+    },
+    {
+      "dtSeconds": 0.005,
+      "position": -4.927841624999997,
+      "velocity": -9.806650000000019,
+      "exactPosition": -4.903325,
+      "positionError": 0.02451662499999685
+    }
+  ],
+  "fixedPointCounterexamples": {
+    "positiveMassOverflow": {
+      "integer": -1894967296,
+      "decoded": -189.4967296,
+      "wrapped": true,
+      "clampedContributions": 0
+    },
+    "intermediateWrapFinalCancellation": {
+      "integer": 1200000000,
+      "decoded": 120,
+      "wrapped": true,
+      "clampedContributions": 0
+    },
+    "contributionClamp": {
+      "integer": 1147483008,
+      "decoded": 114.7483008,
+      "wrapped": false,
+      "clampedContributions": 1
+    },
+    "subQuantum": {
+      "integer": 0,
+      "decoded": 0,
+      "wrapped": false,
+      "clampedContributions": 0
+    }
+  },
+  "gpuPerformance": "NOT_MEASURED"
+}

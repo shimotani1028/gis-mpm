@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GIS-MPM 独立数値検証</title>
+<style>
+body{font:16px/1.6 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;background:#f5f7fa;color:#182533}
+button{padding:10px 18px;margin-right:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:20px}
+</style>
+<h1>既存 MLS-MPM の独立検証</h1>
+<p>既存の WGSL を直接実行します。単位は計算格子・モデル時間であり、SI 単位の災害予測ではありません。
+ダムブレイク・水柱の物理妥当性は未検証です。検査合格は安全性・実現象の正確さを保証しません。</p>
+<p>描画を含まない診断です。CPU 待機を含む所要時間と GPU timestamp は別に記録します。
+格子変更は旧モデルの感度調査であり、物理的な収束試験ではありません。</p>
+<button id="run">標準検証を実行（32³ / 64³）</button>
+<button id="download" disabled>結果 JSON を保存</button>
+<p id="status">未実行</p><pre id="result"></pre>
+<script type="module" src="/src/validation/gpu.ts"></script>
+</html>
